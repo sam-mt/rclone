@@ -728,7 +728,7 @@ func (f *Fs) Copy(ctx context.Context, src fs.Object, remote string) (fs.Object,
 		Resolve:     true,
 		MTime:       api.JSONTime(srcObj.ModTime(ctx)),
 		Name:        dstLeaf,
-		ResolveMode: api.OverwriteOnCopyMode,
+		ResolveMode: api.OverwriteMode,
 	}
 
 	result := &api.File{}
@@ -788,11 +788,12 @@ func (f *Fs) Move(ctx context.Context, src fs.Object, remote string) (fs.Object,
 	}
 
 	params := &api.FileCopyMoveOneParams{
-		ID:      srcObj.id,
-		Target:  directoryID,
-		Resolve: false,
-		MTime:   api.JSONTime(srcObj.ModTime(ctx)),
-		Name:    dstLeaf,
+		ID:          srcObj.id,
+		Target:      directoryID,
+		Resolve:     true,
+		MTime:       api.JSONTime(srcObj.ModTime(ctx)),
+		Name:        dstLeaf,
+		ResolveMode: api.OverwriteMode,
 	}
 
 	var resp *http.Response
