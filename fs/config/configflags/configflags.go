@@ -148,6 +148,7 @@ func AddFlags(ci *fs.ConfigInfo, flagSet *pflag.FlagSet) {
 	flags.FVarP(flagSet, &ci.TerminalColorMode, "color", "", "When to show colors (and other ANSI codes) AUTO|NEVER|ALWAYS", "Config")
 	flags.FVarP(flagSet, &ci.DefaultTime, "default-time", "", "Time to show if modtime is unknown for files and directories", "Config,Listing")
 	flags.BoolVarP(flagSet, &ci.Inplace, "inplace", "", ci.Inplace, "Download directly to destination file instead of atomic download to temp/rename", "Copy")
+	flags.StringVarP(flagSet, &ci.PartialUploadSuffix, "partial-upload-suffix", "", ci.PartialUploadSuffix, "Add partial-upload-suffix to temporary file name when --inplace is not used", "Copy")
 }
 
 // ParseHeaders converts the strings passed in via the header flags into HTTPOptions

@@ -1279,9 +1279,10 @@ flag set) such as:
 
 Without `--inplace` (the default) rclone will first upload to a
 temporary file with an extension like this where `XXXXXX` represents a
-random string.
+random string and `PARTIAL` is [--partial-upload-suffix](#partial-upload-suffix) value
+(`.partial` by default).
 
-    original-file-name.XXXXXX.partial
+    original-file-name.XXXXXXPARTIAL
 
 (rclone will make sure the final name is no longer than 100 characters
 by truncating the `original-file-name` part if necessary).
@@ -1725,6 +1726,13 @@ being more of a best efforts flag rather than a perfect ordering.
 If you want perfect ordering then you will need to specify
 [--check-first](#check-first) which will find all the files which need
 transferring first before transferring any.
+
+### --partial-upload-suffix {#partial-upload-suffix}
+
+When [--inplace](#inplace) is not used, causes rclone to put the `--partial-upload-suffix`
+at the end of temporary file name
+
+The default is `.partial`.
 
 ### --password-command SpaceSepList ###
 
