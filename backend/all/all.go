@@ -27,6 +27,7 @@ import (
 	_ "github.com/rclone/rclone/backend/imagekit"
 	_ "github.com/rclone/rclone/backend/internetarchive"
 	_ "github.com/rclone/rclone/backend/jottacloud"
+	_ "github.com/rclone/rclone/backend/kiteworks"
 	_ "github.com/rclone/rclone/backend/koofr"
 	_ "github.com/rclone/rclone/backend/linkbox"
 	_ "github.com/rclone/rclone/backend/local"
