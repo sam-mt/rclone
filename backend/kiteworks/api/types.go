@@ -9,7 +9,7 @@ import (
 const (
 	DirectoryType = "d"
 	FileType      = "f"
-	RootFolderID  = "0"
+	HashName      = "sha3-256"
 
 	dateFormat = "2006-01-02T15:04:05+0000"
 )
@@ -49,13 +49,38 @@ func (fs *FileSearch) FindByParent(parentID string) *FileInfo {
 
 // FileInfo is a file info model
 type FileInfo struct {
-	ID       string  `json:"id"`
-	ParentID *string `json:"parentId"`
-	Type     string  `json:"type"`
-	Name     string  `json:"name"`
-	Path     string  `json:"path"`
-	Size     int64   `json:"size"`
-	Modified Time    `json:"modified"`
+	ID           string           `json:"id"`
+	ParentID     *string          `json:"parentId"`
+	Type         string           `json:"type"`
+	Name         string           `json:"name"`
+	Path         string           `json:"path"`
+	Size         int64            `json:"size"`
+	Modified     Time             `json:"modified"`
+	FingerPrints FileFingerPrints `json:"fingerprints"`
+}
+
+// FileFingerPrints is a custom type for a list of FileFingerPrint
+type FileFingerPrints []FileFingerPrint
+
+// FindHash finds hash for specified algorithm
+func (fp FileFingerPrints) FindHash(algo string) string {
+	if fp == nil {
+		return ""
+	}
+
+	for _, f := range fp {
+		if f.Algo == algo {
+			return f.Hash
+		}
+	}
+
+	return ""
+}
+
+// FileFingerPrint is a model for file hashes
+type FileFingerPrint struct {
+	Algo string `json:"algo"`
+	Hash string `json:"hash"`
 }
 
 // Time is a custom time to parse string date in specified format
@@ -135,4 +160,10 @@ type UploadResult struct {
 	ID        int64  `json:"id"`
 	URI       string `json:"uri"`
 	TotalSize int64  `json:"totalSize"`
+}
+
+// QuotaInfo is a model that contains quota info for user
+type QuotaInfo struct {
+	FolderQuotaAllowed int64 `json:"folder_quota_allowed"`
+	FolderQuotaUsed    int64 `json:"folder_quota_used"`
 }

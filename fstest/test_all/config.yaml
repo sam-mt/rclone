@@ -451,3 +451,6 @@ backends:
  - backend:  "quatrix"
    remote:   "TestQuatrix:"
    fastlist: false
+ - backend:  "kiteworks"
+   remote:   "TestKiteworks:"
+   fastlist: false

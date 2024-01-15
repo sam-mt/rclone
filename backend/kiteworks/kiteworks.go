@@ -26,6 +26,7 @@ import (
 	"github.com/rclone/rclone/lib/pacer"
 	"github.com/rclone/rclone/lib/readers"
 	"github.com/rclone/rclone/lib/rest"
+	"golang.org/x/crypto/sha3"
 	"golang.org/x/oauth2"
 )
 
@@ -35,21 +36,20 @@ const (
 	redirectURLFmt  = "https://%s/rest/callback.html"
 	rootURLFmt      = "https://%s/"
 
-	defaultScopes = "files/* folders/* uploads/* search/*"
+	defaultScopes = "files/* folders/* uploads/* search/* users/Read"
 
 	minSleep      = 10 * time.Millisecond
 	maxSleep      = 2 * time.Second
 	decayConstant = 2 // bigger for slower decay, exponential
 )
 
+var kiteworksHashType hash.Type
+
 func getOauthConfig(m configmap.Mapper) *oauth2.Config {
 	hostname, _ := m.Get("hostname")
 	clientID, _ := m.Get("client_id")
 	clientSecret, _ := m.Get("client_secret")
-	scopes, ok := m.Get("access_scopes")
-	if !ok {
-		scopes = defaultScopes
-	}
+	scopes, _ := m.Get("access_scopes")
 
 	return &oauth2.Config{
 		Scopes: []string{scopes},
@@ -64,6 +64,8 @@ func getOauthConfig(m configmap.Mapper) *oauth2.Config {
 }
 
 func init() {
+	kiteworksHashType = hash.RegisterHash(api.HashName, strings.ToUpper(api.HashName), 64, sha3.New256)
+
 	fs.Register(&fs.RegInfo{
 		Name:        "kiteworks",
 		Description: "Kiteworks",
@@ -101,6 +103,7 @@ func init() {
 				Help:      "Access scopes for application",
 				Required:  false,
 				Sensitive: false,
+				Default:   defaultScopes,
 			},
 			{
 				Name:     "hard_delete",
@@ -109,18 +112,24 @@ func init() {
 				Default:  false,
 			},
 			{
-				Name:     "minimal_chunk_size",
-				Help:     "The minimal size for one chunk",
+				Name:     "chunk_size",
+				Help:     "Size for upload chunk",
 				Advanced: true,
-				Default:  65000000,
+				Default:  fs.SizeSuffix(65_000_000_000),
 			},
 			{
 				Name:     config.ConfigEncoding,
 				Help:     config.ConfigEncodingHelp,
 				Advanced: true,
-				// TODO clarify encoding
 				Default: encoder.Standard |
 					encoder.EncodeBackSlash |
+					encoder.EncodeAsterisk |
+					encoder.EncodePipe |
+					encoder.EncodeDoubleQuote |
+					encoder.EncodeLtGt |
+					encoder.EncodeColon |
+					encoder.EncodeRightPeriod |
+					encoder.EncodeLeftPeriod |
 					encoder.EncodeInvalidUtf8,
 			},
 		}})
@@ -128,13 +137,13 @@ func init() {
 
 // Options defines the configuration for Kiteworks backend
 type Options struct {
-	Hostname         string               `config:"hostname"`
-	ClientID         string               `config:"client_id"`
-	ClientSecret     string               `config:"client_secret"`
-	Scopes           string               `config:"access_scopes"`
-	HardDelete       bool                 `config:"hard_delete"`
-	MinimalChunkSize int64                `config:"minimal_chunk_size"`
-	Enc              encoder.MultiEncoder `config:"encoding"`
+	Hostname     string               `config:"hostname"`
+	ClientID     string               `config:"client_id"`
+	ClientSecret string               `config:"client_secret"`
+	Scopes       string               `config:"access_scopes"`
+	HardDelete   bool                 `config:"hard_delete"`
+	ChunkSize    fs.SizeSuffix        `config:"chunk_size"`
+	Enc          encoder.MultiEncoder `config:"encoding"`
 }
 
 // Fs represents remote Kiteworks fs
@@ -161,6 +170,7 @@ type Object struct {
 	id          string
 	hasMetaData bool
 	obType      string
+	sha256      string
 }
 
 // trimPath trims redundant slashes from kiteworks 'url'
@@ -217,7 +227,6 @@ func NewFs(ctx context.Context, name, root string, m configmap.Mapper) (fs.Fs, e
 		pacer:       fs.NewPacer(ctx, pacer.NewDefault(pacer.MinSleep(minSleep), pacer.MaxSleep(maxSleep), pacer.DecayConstant(decayConstant))),
 	}
 
-	// TODO parameter and abstraction for api version methods
 	f.srv.SetHeader("X-Accellion-Version", "28")
 
 	f.features = (&fs.Features{
@@ -293,9 +302,8 @@ func (f *Fs) Features() *fs.Features {
 }
 
 // Hashes returns the supported hash sets.
-// TODO add hashes
 func (f *Fs) Hashes() hash.Set {
-	return 0
+	return hash.NewHashSet(kiteworksHashType)
 }
 
 // NewObject finds the Object at remote.  If it can't be found
@@ -339,6 +347,7 @@ func (o *Object) setMetaData(info *api.FileInfo) (err error) {
 	o.id = info.ID
 	o.hasMetaData = true
 	o.obType = info.Type
+	o.sha256 = info.FingerPrints.FindHash(api.HashName)
 
 	return nil
 }
@@ -421,10 +430,20 @@ func (o *Object) ID() string {
 	return o.id
 }
 
-// Hash returns the SHA-1 of an object. Not supported yet.
-// TODO add hash
+// Hash returns the SHA3-256 of an object
 func (o *Object) Hash(ctx context.Context, ty hash.Type) (string, error) {
-	return "", nil
+	if ty != kiteworksHashType {
+		return "", hash.ErrUnsupported
+	}
+
+	if len(o.sha256) == 0 {
+		err := o.readMetaData(ctx)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	return o.sha256, nil
 }
 
 // Fs return the parent Fs
@@ -517,7 +536,6 @@ func (f *Fs) upload(ctx context.Context, file io.Reader, parentID, name string, 
 
 func (f *Fs) uploadChunks(ctx context.Context, file io.Reader, name, path string, chunks []int64) error {
 	for index, chunk := range chunks {
-
 		opts := rest.Opts{
 			Method:        "POST",
 			Path:          path,
@@ -550,9 +568,9 @@ func (f *Fs) splitChunks(totalSize int64) []int64 {
 	var chunks []int64
 
 	for totalSize > 0 {
-		if totalSize > f.opt.MinimalChunkSize {
-			chunks = append(chunks, f.opt.MinimalChunkSize)
-			totalSize -= f.opt.MinimalChunkSize
+		if totalSize > int64(f.opt.ChunkSize) {
+			chunks = append(chunks, int64(f.opt.ChunkSize))
+			totalSize -= int64(f.opt.ChunkSize)
 		} else {
 			chunks = append(chunks, totalSize)
 			totalSize = 0
@@ -575,9 +593,10 @@ func (f *Fs) getMetadata(ctx context.Context, id string) (result *api.FileInfo, 
 		}
 
 		metadata = &api.FileInfo{
-			ID:   id,
-			Type: api.DirectoryType,
-			Size: int64(len(directory.Data)),
+			ID:           id,
+			Type:         api.DirectoryType,
+			Size:         int64(len(directory.Data)),
+			FingerPrints: api.FileFingerPrints{},
 		}
 	}
 
@@ -1023,6 +1042,37 @@ func (f *Fs) purgeCheck(ctx context.Context, dir string, check bool) error {
 	return nil
 }
 
+// About gets quota information
+func (f *Fs) About(ctx context.Context) (usage *fs.Usage, err error) {
+	opts := rest.Opts{
+		Method: "GET",
+		Path:   "rest/users/me/quota",
+	}
+
+	var (
+		quota api.QuotaInfo
+		resp  *http.Response
+	)
+
+	err = f.pacer.Call(func() (bool, error) {
+		resp, err = f.srv.CallJSON(ctx, &opts, nil, &quota)
+		return shouldRetry(ctx, resp, err)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to read quota info: %w", err)
+	}
+
+	free := quota.FolderQuotaAllowed - quota.FolderQuotaUsed
+
+	usage = &fs.Usage{
+		Used:  fs.NewUsageValue(quota.FolderQuotaUsed),    // bytes in use
+		Total: fs.NewUsageValue(quota.FolderQuotaAllowed), // bytes total
+		Free:  fs.NewUsageValue(free),                     // bytes free
+	}
+
+	return usage, nil
+}
+
 // Shutdown shutdown the fs
 func (f *Fs) Shutdown(ctx context.Context) error {
 	f.tokenRenewer.Shutdown()
@@ -1037,10 +1087,10 @@ func (f *Fs) DirCacheFlush() {
 
 // Check the interfaces are satisfied
 var (
-	_ fs.Fs     = (*Fs)(nil)
-	_ fs.Purger = (*Fs)(nil)
+	_ fs.Fs      = (*Fs)(nil)
+	_ fs.Purger  = (*Fs)(nil)
+	_ fs.Abouter = (*Fs)(nil)
 	// _ fs.Copier          = (*Fs)(nil)
-	// _ fs.Abouter         = (*Fs)(nil)
 	// _ fs.Mover           = (*Fs)(nil)
 	// _ fs.DirMover        = (*Fs)(nil)
 	_ dircache.DirCacher = (*Fs)(nil)
