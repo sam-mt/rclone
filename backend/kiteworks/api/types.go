@@ -49,14 +49,16 @@ func (fs *FileSearch) FindByParent(parentID string) *FileInfo {
 
 // FileInfo is a file info model
 type FileInfo struct {
-	ID           string           `json:"id"`
-	ParentID     *string          `json:"parentId"`
-	Type         string           `json:"type"`
-	Name         string           `json:"name"`
-	Path         string           `json:"path"`
-	Size         int64            `json:"size"`
-	Modified     Time             `json:"modified"`
-	FingerPrints FileFingerPrints `json:"fingerprints"`
+	ID             string           `json:"id"`
+	ParentID       *string          `json:"parentId"`
+	Type           string           `json:"type"`
+	Name           string           `json:"name"`
+	Path           string           `json:"path"`
+	Size           int64            `json:"size"`
+	Modified       Time             `json:"modified"`
+	ClientModified *Time            `json:"clientModified"`
+	FingerPrints   FileFingerPrints `json:"fingerprints"`
+	Deleted        bool             `json:"deleted"` // TODO remove
 }
 
 // FileFingerPrints is a custom type for a list of FileFingerPrint

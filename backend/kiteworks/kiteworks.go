@@ -123,13 +123,21 @@ func init() {
 				Advanced: true,
 				Default: encoder.Standard |
 					encoder.EncodeBackSlash |
+					encoder.EncodeLtGt |
+					encoder.EncodeDoubleQuote |
+					encoder.EncodeColon |
+					encoder.EncodeQuestion |
 					encoder.EncodeAsterisk |
 					encoder.EncodePipe |
-					encoder.EncodeDoubleQuote |
-					encoder.EncodeLtGt |
-					encoder.EncodeColon |
-					encoder.EncodeRightPeriod |
+					encoder.EncodeBackSlash |
+					// encoder.EncodeCrLf |
+					// encoder.EncodeDel |
+					// encoder.EncodeCtl |
 					encoder.EncodeLeftPeriod |
+					// encoder.EncodeLeftTilde |
+					// encoder.EncodeLeftCrLfHtVt |
+					encoder.EncodeRightPeriod |
+					// encoder.EncodeRightCrLfHtVt |
 					encoder.EncodeInvalidUtf8,
 			},
 		}})
@@ -148,17 +156,17 @@ type Options struct {
 
 // Fs represents remote Kiteworks fs
 type Fs struct {
-	name         string
-	root         string
-	rootFound    bool
-	description  string
-	features     *fs.Features
-	opt          Options
-	ci           *fs.ConfigInfo
-	srv          *rest.Client     // the connection to the kiteworks server
-	pacer        *fs.Pacer        // pacer for API calls
-	tokenRenewer *oauthutil.Renew // renew the token on expiry
-	dirCache     *dircache.DirCache
+	name          string
+	root          string
+	realRootFound bool
+	description   string
+	features      *fs.Features
+	opt           Options
+	ci            *fs.ConfigInfo
+	srv           *rest.Client     // the connection to the kiteworks server
+	pacer         *fs.Pacer        // pacer for API calls
+	tokenRenewer  *oauthutil.Renew // renew the token on expiry
+	dirCache      *dircache.DirCache
 }
 
 // Object describes a quatrix object
@@ -237,11 +245,11 @@ func NewFs(ctx context.Context, name, root string, m configmap.Mapper) (fs.Fs, e
 
 	// Renew the token in the background
 	f.tokenRenewer = oauthutil.NewRenew(f.String(), ts, func() error {
-		_, _, err := f.fileID(ctx, "", "")
+		_, _, err := f.getFileID(ctx, "", "")
 		return err
 	})
 
-	rootID, found, err := f.fileID(ctx, "", "")
+	rootID, found, err := f.getFileID(ctx, "", "")
 	if err != nil {
 		return nil, err
 	}
@@ -250,11 +258,12 @@ func NewFs(ctx context.Context, name, root string, m configmap.Mapper) (fs.Fs, e
 		return nil, errors.New("root not found")
 	}
 
+	f.realRootFound = true
 	f.dirCache = dircache.New(root, rootID.ID, f)
 
 	err = f.dirCache.FindRoot(ctx, false)
 	if err != nil {
-		fileID, found, err := f.fileID(ctx, "", root)
+		fileID, found, err := f.getFileID(ctx, "", root)
 		if err != nil {
 			return nil, fmt.Errorf("find root %s: %w", root, err)
 		}
@@ -270,8 +279,6 @@ func NewFs(ctx context.Context, name, root string, m configmap.Mapper) (fs.Fs, e
 			return f, fs.ErrorIsFile
 		}
 	}
-
-	f.rootFound = f.dirCache.FoundRoot()
 
 	return f, nil
 }
@@ -293,7 +300,7 @@ func (f *Fs) String() string {
 
 // Precision return the precision of this Fs
 func (f *Fs) Precision() time.Duration {
-	return time.Microsecond
+	return time.Second
 }
 
 // Features returns the optional features of this Fs
@@ -343,11 +350,16 @@ func (o *Object) setMetaData(info *api.FileInfo) (err error) {
 	}
 
 	o.size = info.Size
-	o.modTime = time.Time(info.Modified)
 	o.id = info.ID
 	o.hasMetaData = true
 	o.obType = info.Type
 	o.sha256 = info.FingerPrints.FindHash(api.HashName)
+
+	if info.ClientModified != nil {
+		o.modTime = time.Time(*info.ClientModified)
+	} else {
+		o.modTime = time.Time(info.Modified)
+	}
 
 	return nil
 }
@@ -365,9 +377,9 @@ func (o *Object) readMetaData(ctx context.Context) (err error) {
 		return err
 	}
 
-	file, found, err := o.fs.fileID(ctx, directoryID, leaf)
+	file, found, err := o.fs.getFileID(ctx, directoryID, leaf)
 	if err != nil {
-		return fmt.Errorf("read metadata: fileID: %w", err)
+		return fmt.Errorf("get fileID for %s in directory %s: %w", leaf, directoryID, err)
 	}
 
 	if !found {
@@ -405,8 +417,7 @@ func (o *Object) ModTime(ctx context.Context) time.Time {
 
 // SetModTime sets the modification time of the local fs object
 func (o *Object) SetModTime(ctx context.Context, t time.Time) error {
-	o.modTime = t
-	return nil
+	return fs.ErrorCantSetModTime
 }
 
 // Size returns the size of an object in bytes
@@ -468,7 +479,7 @@ func (o *Object) Remote() string {
 func (o *Object) Remove(ctx context.Context) error {
 	err := o.fs.deleteObject(ctx, o.id)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to remove %s %s: %w", o.obType, o.id, err)
 	}
 
 	if o.obType != api.FileType {
@@ -502,7 +513,10 @@ func (o *Object) Update(ctx context.Context, in io.Reader, src fs.ObjectInfo, op
 		return err
 	}
 
-	return o.SetModTime(ctx, modTime)
+	o.modTime = modTime
+	o.size = size
+
+	return nil
 }
 
 func (f *Fs) upload(ctx context.Context, file io.Reader, parentID, name string, size int64, modTime time.Time) (err error) {
@@ -514,7 +528,7 @@ func (f *Fs) upload(ctx context.Context, file io.Reader, parentID, name string, 
 	chunks := f.splitChunks(size)
 
 	payload := api.InitializeUpload{
-		FileName:       name,
+		FileName:       f.opt.Enc.FromStandardName(name),
 		TotalSize:      size,
 		TotalChunks:    len(chunks),
 		ClientModified: modTime.Format(time.RFC3339),
@@ -787,7 +801,7 @@ func (f *Fs) List(ctx context.Context, dir string) (entries fs.DirEntries, err e
 
 // FindLeaf finds a directory of name leaf in the folder with ID pathID
 func (f *Fs) FindLeaf(ctx context.Context, pathID, leaf string) (folderID string, found bool, err error) {
-	result, found, err := f.fileID(ctx, pathID, leaf)
+	result, found, err := f.getFileID(ctx, pathID, leaf)
 	if err != nil {
 		return "", false, fmt.Errorf("find leaf: %w", err)
 	}
@@ -819,20 +833,21 @@ func (f *Fs) CreateDir(ctx context.Context, pathID, leaf string) (dirID string, 
 	return dir.ID, nil
 }
 
-// fileID gets id, parent and type of path in given parentID
-// !fix search API to return ID in case it's file
-func (f *Fs) fileID(ctx context.Context, parentID, path string) (result *api.FileInfo, found bool, err error) {
+// getFileID gets id, parent and type of path in given parentID
+func (f *Fs) getFileID(ctx context.Context, parentID, path string) (result *api.FileInfo, found bool, err error) {
 	if path == "" {
-		return f.rootFileID(ctx)
+		return f.getRootFileID(ctx)
 	}
 
 	parentPath, _ := f.dirCache.GetInv(parentID)
-	if f.rootFound {
-		parentPath = filepath.Join(f.Root(), parentPath)
+	path = filepath.Join(parentPath, path)
+
+	if f.realRootFound && path != f.root {
+		path = filepath.Join(f.Root(), path)
 	}
 
 	parameters := url.Values{
-		"path": []string{f.opt.Enc.FromStandardPath(filepath.Join(parentPath, path))},
+		"path": []string{f.opt.Enc.FromStandardPath(path)},
 	}
 
 	opts := rest.Opts{
@@ -856,10 +871,14 @@ func (f *Fs) fileID(ctx context.Context, parentID, path string) (result *api.Fil
 		return nil, false, nil
 	}
 
+	if result.ID == "" {
+		return nil, false, fmt.Errorf("empty ID returned for path %s", path)
+	}
+
 	return result, true, nil
 }
 
-func (f *Fs) rootFileID(ctx context.Context) (result *api.FileInfo, found bool, err error) {
+func (f *Fs) getRootFileID(ctx context.Context) (result *api.FileInfo, found bool, err error) {
 	parameters := url.Values{
 		"limit":   []string{"1"},
 		"deleted": []string{"false"},
