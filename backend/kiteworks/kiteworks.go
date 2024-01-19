@@ -310,7 +310,7 @@ func (f *Fs) Features() *fs.Features {
 
 // Hashes returns the supported hash sets.
 func (f *Fs) Hashes() hash.Set {
-	return hash.NewHashSet(kiteworksHashType)
+	return hash.Set(kiteworksHashType)
 }
 
 // NewObject finds the Object at remote.  If it can't be found
@@ -329,7 +329,7 @@ func (f *Fs) newObjectWithInfo(ctx context.Context, remote string, info *api.Fil
 	if info != nil {
 		err = o.setMetaData(info)
 	} else {
-		err = o.readMetaData(ctx) // reads info and meta, returning an error
+		err = o.readMetaData(ctx, false)
 	}
 	if err != nil {
 		return nil, err
@@ -364,8 +364,9 @@ func (o *Object) setMetaData(info *api.FileInfo) (err error) {
 	return nil
 }
 
-func (o *Object) readMetaData(ctx context.Context) (err error) {
-	if o.hasMetaData {
+// ! TODO upload should return hash because otherwise on each upload we will be reading metadata to know changed hash
+func (o *Object) readMetaData(ctx context.Context, force bool) (err error) {
+	if o.hasMetaData && !force {
 		return nil
 	}
 
@@ -406,7 +407,7 @@ func (o *Object) Open(ctx context.Context, options ...fs.OpenOption) (in io.Read
 
 // ModTime returns the modification time of the object
 func (o *Object) ModTime(ctx context.Context) time.Time {
-	err := o.readMetaData(ctx)
+	err := o.readMetaData(ctx, false)
 	if err != nil {
 		fs.Logf(o, "Failed to read metadata: %v", err)
 		return time.Now()
@@ -422,7 +423,7 @@ func (o *Object) SetModTime(ctx context.Context, t time.Time) error {
 
 // Size returns the size of an object in bytes
 func (o *Object) Size() int64 {
-	err := o.readMetaData(context.TODO())
+	err := o.readMetaData(context.TODO(), false)
 	if err != nil {
 		fs.Logf(o, "Failed to read metadata: %v", err)
 		return 0
@@ -447,11 +448,9 @@ func (o *Object) Hash(ctx context.Context, ty hash.Type) (string, error) {
 		return "", hash.ErrUnsupported
 	}
 
-	if len(o.sha256) == 0 {
-		err := o.readMetaData(ctx)
-		if err != nil {
-			return "", err
-		}
+	err := o.readMetaData(ctx, false)
+	if err != nil {
+		return "", err
 	}
 
 	return o.sha256, nil
@@ -513,13 +512,11 @@ func (o *Object) Update(ctx context.Context, in io.Reader, src fs.ObjectInfo, op
 		return err
 	}
 
-	o.modTime = modTime
-	o.size = size
-
-	return nil
+	// ! TODO upload should return hash in the response model because otherwise on each upload we will be reading metadata to know changed hash
+	return o.readMetaData(ctx, true)
 }
 
-func (f *Fs) upload(ctx context.Context, file io.Reader, parentID, name string, size int64, modTime time.Time) (err error) {
+func (f *Fs) upload(ctx context.Context, file io.Reader, parentID, name string, size int64, modTime time.Time) error {
 	opts := rest.Opts{
 		Method: "POST",
 		Path:   fmt.Sprintf("/rest/folders/%s/actions/initiateUpload", parentID),
@@ -536,9 +533,8 @@ func (f *Fs) upload(ctx context.Context, file io.Reader, parentID, name string, 
 
 	var result = &api.UploadResult{}
 
-	var resp *http.Response
-	err = f.pacer.Call(func() (bool, error) {
-		resp, err = f.srv.CallJSON(ctx, &opts, payload, result)
+	err := f.pacer.Call(func() (bool, error) {
+		resp, err := f.srv.CallJSON(ctx, &opts, payload, result)
 		return shouldRetry(ctx, resp, err)
 	})
 	if err != nil {
@@ -619,8 +615,7 @@ func (f *Fs) getMetadata(ctx context.Context, id string) (result *api.FileInfo, 
 
 func (f *Fs) getFileMetadata(ctx context.Context, id string) (result *api.FileInfo, err error) {
 	parameters := url.Values{
-		"returnEntity": []string{"true"},
-		"deleted":      []string{"false"},
+		"deleted": []string{"false"},
 	}
 
 	opts := rest.Opts{
@@ -650,8 +645,7 @@ func (f *Fs) getFileMetadata(ctx context.Context, id string) (result *api.FileIn
 
 func (f *Fs) getDirectoryMetadata(ctx context.Context, id string) (result *api.DirectoryInfo, err error) {
 	parameters := url.Values{
-		"returnEntity": []string{"true"},
-		"deleted":      []string{"false"},
+		"deleted": []string{"false"},
 	}
 
 	opts := rest.Opts{

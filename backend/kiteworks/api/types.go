@@ -58,7 +58,6 @@ type FileInfo struct {
 	Modified       Time             `json:"modified"`
 	ClientModified *Time            `json:"clientModified"`
 	FingerPrints   FileFingerPrints `json:"fingerprints"`
-	Deleted        bool             `json:"deleted"` // TODO remove
 }
 
 // FileFingerPrints is a custom type for a list of FileFingerPrint
