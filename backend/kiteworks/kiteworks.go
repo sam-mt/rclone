@@ -156,17 +156,16 @@ type Options struct {
 
 // Fs represents remote Kiteworks fs
 type Fs struct {
-	name          string
-	root          string
-	realRootFound bool
-	description   string
-	features      *fs.Features
-	opt           Options
-	ci            *fs.ConfigInfo
-	srv           *rest.Client     // the connection to the kiteworks server
-	pacer         *fs.Pacer        // pacer for API calls
-	tokenRenewer  *oauthutil.Renew // renew the token on expiry
-	dirCache      *dircache.DirCache
+	name         string
+	root         string
+	description  string
+	features     *fs.Features
+	opt          Options
+	ci           *fs.ConfigInfo
+	srv          *rest.Client     // the connection to the kiteworks server
+	pacer        *fs.Pacer        // pacer for API calls
+	tokenRenewer *oauthutil.Renew // renew the token on expiry
+	dirCache     *dircache.DirCache
 }
 
 // Object describes a quatrix object
@@ -209,7 +208,6 @@ func shouldRetry(ctx context.Context, resp *http.Response, err error) (bool, err
 
 // NewFs constructs an Fs from the path, container:path
 func NewFs(ctx context.Context, name, root string, m configmap.Mapper) (fs.Fs, error) {
-	// Parse config into Options struct
 	opt := new(Options)
 
 	err := configstruct.Set(m, opt)
@@ -258,7 +256,6 @@ func NewFs(ctx context.Context, name, root string, m configmap.Mapper) (fs.Fs, e
 		return nil, errors.New("root not found")
 	}
 
-	f.realRootFound = true
 	f.dirCache = dircache.New(root, rootID.ID, f)
 
 	err = f.dirCache.FindRoot(ctx, false)
@@ -364,7 +361,6 @@ func (o *Object) setMetaData(info *api.FileInfo) (err error) {
 	return nil
 }
 
-// ! TODO upload should return hash because otherwise on each upload we will be reading metadata to know changed hash
 func (o *Object) readMetaData(ctx context.Context, force bool) (err error) {
 	if o.hasMetaData && !force {
 		return nil
@@ -416,7 +412,7 @@ func (o *Object) ModTime(ctx context.Context) time.Time {
 	return o.modTime
 }
 
-// SetModTime sets the modification time of the local fs object
+// SetModTime sets the modification time of the local fs object. Not supported, file must be re-uploaded to change modification time
 func (o *Object) SetModTime(ctx context.Context, t time.Time) error {
 	return fs.ErrorCantSetModTime
 }
@@ -575,6 +571,10 @@ func (f *Fs) uploadChunks(ctx context.Context, file io.Reader, name, path string
 }
 
 func (f *Fs) splitChunks(totalSize int64) []int64 {
+	if totalSize == 0 {
+		return []int64{totalSize}
+	}
+
 	var chunks []int64
 
 	for totalSize > 0 {
@@ -819,7 +819,7 @@ func (f *Fs) Mkdir(ctx context.Context, dir string) error {
 
 // CreateDir makes a directory with pathID as parent and name leaf
 func (f *Fs) CreateDir(ctx context.Context, pathID, leaf string) (dirID string, err error) {
-	dir, err := f.createDir(ctx, pathID, leaf, false)
+	dir, err := f.createDir(ctx, pathID, leaf)
 	if err != nil {
 		return "", err
 	}
@@ -836,7 +836,8 @@ func (f *Fs) getFileID(ctx context.Context, parentID, path string) (result *api.
 	parentPath, _ := f.dirCache.GetInv(parentID)
 	path = filepath.Join(parentPath, path)
 
-	if f.realRootFound && path != f.root {
+	// search in Kiteworks works always from the home folder, so we need to join path with the root when needed
+	if !f.isRootIncluded(path) {
 		path = filepath.Join(f.Root(), path)
 	}
 
@@ -870,6 +871,17 @@ func (f *Fs) getFileID(ctx context.Context, parentID, path string) (result *api.
 	}
 
 	return result, true, nil
+}
+
+func (f *Fs) isRootIncluded(path string) bool {
+	root := strings.TrimSuffix(filepath.ToSlash(f.Root()), "/") + "/"
+	path = strings.TrimSuffix(filepath.ToSlash(path), "/") + "/"
+
+	if len(path) <= len(root) {
+		return strings.HasPrefix(root, path)
+	}
+
+	return strings.HasPrefix(path, root)
 }
 
 func (f *Fs) getRootFileID(ctx context.Context) (result *api.FileInfo, found bool, err error) {
@@ -907,7 +919,7 @@ func (f *Fs) getRootFileID(ctx context.Context) (result *api.FileInfo, found boo
 // createDir creates directory in pathID with name leaf
 //
 // resolve - if true will resolve name conflict on server side, if false - will return error if object with this name exists
-func (f *Fs) createDir(ctx context.Context, pathID, leaf string, resolve bool) (newDir *api.FileInfo, err error) {
+func (f *Fs) createDir(ctx context.Context, pathID, leaf string) (newDir *api.FileInfo, err error) {
 	parameters := url.Values{
 		"returnEntity": []string{"true"},
 	}
