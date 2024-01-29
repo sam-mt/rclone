@@ -52,6 +52,7 @@ docs = [
     "imagekit.md",
     "internetarchive.md",
     "jottacloud.md",
+    "kiteworks.md",
     "koofr.md",
     "linkbox.md",
     "mailru.md",

@@ -52,6 +52,7 @@ See the following for detailed instructions for
   * [HTTP](/http/)
   * [Internet Archive](/internetarchive/)
   * [Jottacloud](/jottacloud/)
+  * [Kiteworks](/kiteworks/)
   * [Koofr](/koofr/)
   * [Linkbox](/linkbox/)
   * [Mail.ru Cloud](/mailru/)
