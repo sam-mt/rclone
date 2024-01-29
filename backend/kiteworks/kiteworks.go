@@ -444,7 +444,8 @@ func (o *Object) Hash(ctx context.Context, ty hash.Type) (string, error) {
 		return "", hash.ErrUnsupported
 	}
 
-	err := o.readMetaData(ctx, false)
+	// ! TODO upload should return hash in the response model because otherwise on each upload we will be reading metadata to know changed hash
+	err := o.readMetaData(ctx, true)
 	if err != nil {
 		return "", err
 	}
@@ -503,16 +504,15 @@ func (o *Object) Update(ctx context.Context, in io.Reader, src fs.ObjectInfo, op
 		return err
 	}
 
-	err = o.fs.upload(ctx, in, directoryID, leaf, size, modTime)
+	info, err := o.fs.upload(ctx, in, directoryID, leaf, size, modTime)
 	if err != nil {
 		return err
 	}
 
-	// ! TODO upload should return hash in the response model because otherwise on each upload we will be reading metadata to know changed hash
-	return o.readMetaData(ctx, true)
+	return o.setMetaData(info)
 }
 
-func (f *Fs) upload(ctx context.Context, file io.Reader, parentID, name string, size int64, modTime time.Time) error {
+func (f *Fs) upload(ctx context.Context, file io.Reader, parentID, name string, size int64, modTime time.Time) (*api.FileInfo, error) {
 	opts := rest.Opts{
 		Method: "POST",
 		Path:   fmt.Sprintf("/rest/folders/%s/actions/initiateUpload", parentID),
@@ -534,14 +534,16 @@ func (f *Fs) upload(ctx context.Context, file io.Reader, parentID, name string, 
 		return shouldRetry(ctx, resp, err)
 	})
 	if err != nil {
-		return fmt.Errorf("failed to initialize upload: %w", err)
+		return nil, fmt.Errorf("failed to initialize upload: %w", err)
 	}
 
 	return f.uploadChunks(ctx, file, name, result.URI, chunks)
 }
 
-func (f *Fs) uploadChunks(ctx context.Context, file io.Reader, name, path string, chunks []int64) error {
+func (f *Fs) uploadChunks(ctx context.Context, file io.Reader, name, path string, chunks []int64) (info *api.FileInfo, err error) {
 	for index, chunk := range chunks {
+		isLastChunk := index == len(chunks)-1
+
 		opts := rest.Opts{
 			Method:        "POST",
 			Path:          path,
@@ -553,21 +555,29 @@ func (f *Fs) uploadChunks(ctx context.Context, file io.Reader, name, path string
 				"originalSize":    []string{strconv.FormatInt(chunk, 10)},
 				"index":           []string{strconv.Itoa(index + 1)},
 			},
+			Parameters: url.Values{
+				"returnEntity": []string{"true"},
+			},
 			MultipartContentName: "content",
 			MultipartFileName:    name,
 			NoResponse:           true,
 		}
 
+		if isLastChunk {
+			opts.NoResponse = false
+			info = &api.FileInfo{}
+		}
+
 		err := f.pacer.Call(func() (bool, error) {
-			resp, err := f.srv.CallJSON(ctx, &opts, nil, nil)
+			resp, err := f.srv.CallJSON(ctx, &opts, nil, info)
 			return shouldRetry(ctx, resp, err)
 		})
 		if err != nil {
-			return fmt.Errorf("failed to upload chunk %d of file: %w", index, err)
+			return nil, fmt.Errorf("failed to upload chunk %d of file: %w", index, err)
 		}
 	}
 
-	return nil
+	return info, nil
 }
 
 func (f *Fs) splitChunks(totalSize int64) []int64 {
