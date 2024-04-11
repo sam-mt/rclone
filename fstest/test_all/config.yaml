@@ -7,6 +7,7 @@ tests:
    fastlist: true
  - path: fs/sync
    fastlist: true
+ - path: cmd/bisync
  - path: vfs
  - path: cmd/serve/restic
    localonly: true
@@ -460,4 +461,7 @@ backends:
    fastlist: false
  - backend:  "kiteworks"
    remote:   "TestKiteworks:"
+   fastlist: false
+ - backend:  "ulozto"
+   remote:   "TestUlozto:"
    fastlist: false
