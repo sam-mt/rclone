@@ -130,14 +130,10 @@ func init() {
 					encoder.EncodeAsterisk |
 					encoder.EncodePipe |
 					encoder.EncodeBackSlash |
-					// encoder.EncodeCrLf |
-					// encoder.EncodeDel |
-					// encoder.EncodeCtl |
 					encoder.EncodeLeftPeriod |
-					// encoder.EncodeLeftTilde |
-					// encoder.EncodeLeftCrLfHtVt |
 					encoder.EncodeRightPeriod |
-					// encoder.EncodeRightCrLfHtVt |
+					encoder.EncodeRightSpace |
+					encoder.EncodeLeftSpace |
 					encoder.EncodeInvalidUtf8,
 			},
 		}})
@@ -270,8 +266,8 @@ func NewFs(ctx context.Context, name, root string, m configmap.Mapper) (fs.Fs, e
 		}
 
 		if fileID.IsFile() {
-			root, _ = dircache.SplitPath(root)
-			f.dirCache = dircache.New(root, rootID.ID, f)
+			f.root, _ = dircache.SplitPath(root)
+			f.dirCache = dircache.New(f.root, rootID.ID, f)
 
 			return f, fs.ErrorIsFile
 		}
@@ -541,6 +537,8 @@ func (f *Fs) upload(ctx context.Context, file io.Reader, parentID, name string, 
 }
 
 func (f *Fs) uploadChunks(ctx context.Context, file io.Reader, name, path string, chunks []int64) (info *api.FileInfo, err error) {
+	info = &api.FileInfo{}
+
 	for index, chunk := range chunks {
 		isLastChunk := index == len(chunks)-1
 
@@ -565,7 +563,6 @@ func (f *Fs) uploadChunks(ctx context.Context, file io.Reader, name, path string
 
 		if isLastChunk {
 			opts.NoResponse = false
-			info = &api.FileInfo{}
 		}
 
 		err := f.pacer.Call(func() (bool, error) {
