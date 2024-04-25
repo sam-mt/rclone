@@ -311,3 +311,4 @@ Properties:
 ## Server-side operations
 
 Kiteworks supports server-side operations (copy and move) but for now they are not implemented.
+Meanwhile, Kiteworks supports file versioning, which provides with data backup out of the box.
