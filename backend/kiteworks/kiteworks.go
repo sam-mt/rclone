@@ -559,6 +559,9 @@ func (f *Fs) uploadChunks(ctx context.Context, file io.Reader, name, path string
 			MultipartContentName: "content",
 			MultipartFileName:    name,
 			NoResponse:           true,
+			GetBody: func() (io.ReadCloser, error) {
+				return io.NopCloser(readers.NewRepeatableReader(io.LimitReader(file, chunk))), nil
+			},
 		}
 
 		if isLastChunk {
