@@ -511,7 +511,7 @@ func (o *Object) Update(ctx context.Context, in io.Reader, src fs.ObjectInfo, op
 func (f *Fs) upload(ctx context.Context, file io.Reader, parentID, name string, size int64, modTime time.Time) (*api.FileInfo, error) {
 	opts := rest.Opts{
 		Method: "POST",
-		Path:   fmt.Sprintf("/rest/folders/%s/actions/initiateUpload", parentID),
+		Path:   fmt.Sprintf("rest/folders/%s/actions/initiateUpload", parentID),
 	}
 
 	chunks := f.splitChunks(size)
