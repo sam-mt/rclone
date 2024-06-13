@@ -279,6 +279,9 @@ backends:
    remote:   "TestSwiftAIO:"
    fastlist: true
  - backend:  "swift"
+   remote:   "TestSwiftAIOsegments:"
+   fastlist: true
+ - backend:  "swift"
    remote:   "TestSwift:"
    fastlist: true
  # - backend:  "swift"
@@ -340,6 +343,9 @@ backends:
      - TestSyncWithTrackRenames
     # integration
      - TestIntegration/FsMkdir/FsPutFiles/ObjectMimeType
+    # This test fails with message
+    # "share_status_prohibited" (9): Sorry, the sharing service is under maintenance in the current region.
+     - TestIntegration/FsMkdir/FsPutFiles/PublicLink
  - backend:  "webdav"
    remote:   "TestWebdavNextcloud:"
    ignore:
@@ -386,6 +392,7 @@ backends:
      - TestRWFileHandleWriteNoWrite
      - TestCaseInsensitiveMoveFile
      - TestFixCase
+     - TestListDirSorted        # Can't upload files starting with . - FIXME fix with encoding
  - backend:  "premiumizeme"
    remote:   "TestPremiumizeMe:"
    fastlist: false

@@ -1944,6 +1944,10 @@ with the `--stats` flag.
 This can be used with the `--stats-one-line` flag for a simpler
 display.
 
+To change the display length of filenames (for different terminal widths),
+see the `--stats-file-name-length` option.  The default output is formatted
+for 80 character wide terminals.
+
 Note: On Windows until [this bug](https://github.com/Azure/go-ansiterm/issues/26)
 is fixed all non-ASCII characters will be replaced with `.` when
 `--progress` is in use.
@@ -2782,7 +2786,7 @@ it will log a high priority message if the retry was successful.
   * `6` - Less serious errors (like 461 errors from dropbox) (NoRetry errors)
   * `7` - Fatal error (one that more retries won't fix, like account suspended) (Fatal errors)
   * `8` - Transfer exceeded - limit set by --max-transfer reached
-  * `9` - Operation successful, but no files transferred
+  * `9` - Operation successful, but no files transferred (Requires [`--error-on-no-transfer`](#error-on-no-transfer))
   * `10` - Duration exceeded - limit set by --max-duration reached
 
 Environment Variables
