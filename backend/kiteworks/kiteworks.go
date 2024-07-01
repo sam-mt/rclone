@@ -115,7 +115,7 @@ func init() {
 				Name:     "chunk_size",
 				Help:     "Size for upload chunk",
 				Advanced: true,
-				Default:  fs.SizeSuffix(65_000_000_000),
+				Default:  65 * fs.Mebi,
 			},
 			{
 				Name:     config.ConfigEncoding,
