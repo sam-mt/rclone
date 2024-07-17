@@ -4,7 +4,7 @@ description: "Rclone docs for Kiteworks"
 versionIntroduced: "v1.65.2"
 ---
 
-# {{< icon "fas fa-shield-alt" >}} Kiteworks
+# {{< icon "fab fa-korvue" >}} Kiteworks
 
 Kiteworks is [Secure File Sharing | Kiteworks](https://www.kiteworks.com/).
 
@@ -88,7 +88,7 @@ To copy a local directory to a Kiteworks directory called backup
 
 ### Invalid refresh token
 
-> Expiration for token and refresh token can be set per application.
+Expiration for token and refresh token can be set per application.
 If you
 
   * Don't use the kiteworks remote for the specified expiration time of the token.
