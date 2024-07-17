@@ -280,7 +280,7 @@ Properties:
 - Config:      chunk_size
 - Env Var:     RCLONE_KITEWORKS_CHUNK_SIZE
 - Type:        SizeSuffix
-- Default:     60.536Gi
+- Default:     65Mi
 
 #### --kiteworks-encoding
 
@@ -293,11 +293,11 @@ Properties:
 - Config:      encoding
 - Env Var:     RCLONE_KITEWORKS_ENCODING
 - Type:        Encoding
-- Default:     Slash,LtGt,DoubleQuote,Colon,Question,Asterisk,Pipe,BackSlash,Del,Ctl,LeftPeriod,RightPeriod,InvalidUtf8,Dot
+- Default:     Slash,LtGt,DoubleQuote,Colon,Question,Asterisk,Pipe,BackSlash,Del,Ctl,LeftSpace,LeftPeriod,RightSpace,RightPeriod,InvalidUtf8,Dot
 
 #### --kiteworks-description
 
-Description of the remote
+Description of the remote.
 
 Properties:
 
