@@ -948,6 +948,10 @@ func (f *Fs) createDir(ctx context.Context, pathID, leaf string) (newDir *api.Fi
 		return shouldRetry(ctx, resp, err)
 	})
 	if err != nil {
+		msg := err.Error()
+		if strings.HasPrefix(msg, "HTTP error 409 (409 Conflict) returned body") && strings.Contains(msg, "ERR_ENTITY_EXISTS") {
+			return newDir, nil
+		}
 		return nil, fmt.Errorf("failed to create directory: %w", err)
 	}
 
