@@ -837,7 +837,7 @@ func (f *Fs) CreateDir(ctx context.Context, pathID, leaf string) (dirID string, 
 // getFileID gets id, parent and type of path in given parentID
 func (f *Fs) getFileID(ctx context.Context, parentID, path string) (result *api.FileInfo, found bool, err error) {
 	if path == "" {
-		return f.getRootFileID(ctx)
+		return f.getRootFileID(ctx, 0)
 	}
 
 	parentPath, _ := f.dirCache.GetInv(parentID)
@@ -891,10 +891,11 @@ func (f *Fs) isRootIncluded(path string) bool {
 	return strings.HasPrefix(path, root)
 }
 
-func (f *Fs) getRootFileID(ctx context.Context) (result *api.FileInfo, found bool, err error) {
+func (f *Fs) getRootFileID(ctx context.Context, offset int) (result *api.FileInfo, found bool, err error) {
 	parameters := url.Values{
 		"limit":   []string{"1"},
 		"deleted": []string{"false"},
+		"offset":  []string{strconv.Itoa(offset)},
 	}
 
 	opts := rest.Opts{
@@ -915,6 +916,10 @@ func (f *Fs) getRootFileID(ctx context.Context) (result *api.FileInfo, found boo
 
 	if len(rootTopDir.Data) == 0 {
 		return nil, false, nil
+	}
+
+	if *rootTopDir.Data[0].ParentID == "0" {
+		return f.getRootFileID(ctx, offset+1)
 	}
 
 	return &api.FileInfo{
