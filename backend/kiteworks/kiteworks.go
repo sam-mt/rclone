@@ -36,7 +36,8 @@ const (
 	redirectURLFmt  = "https://%s/rest/callback.html"
 	rootURLFmt      = "https://%s/"
 
-	defaultScopes = "files/* folders/* uploads/* search/* users/Read"
+	// defaultScopes = "files/* folders/* uploads/* search/* users/Read"
+	defaultScopes = "*/files/* GET/folders/* */folders/* */search/* */uploads/* GET/users/*"
 
 	minSleep      = 10 * time.Millisecond
 	maxSleep      = 2 * time.Second
@@ -837,7 +838,7 @@ func (f *Fs) CreateDir(ctx context.Context, pathID, leaf string) (dirID string, 
 // getFileID gets id, parent and type of path in given parentID
 func (f *Fs) getFileID(ctx context.Context, parentID, path string) (result *api.FileInfo, found bool, err error) {
 	if path == "" {
-		return f.getRootFileID(ctx, 0)
+		return f.getRootFileID(ctx)
 	}
 
 	parentPath, _ := f.dirCache.GetInv(parentID)
@@ -891,39 +892,24 @@ func (f *Fs) isRootIncluded(path string) bool {
 	return strings.HasPrefix(path, root)
 }
 
-func (f *Fs) getRootFileID(ctx context.Context, offset int) (result *api.FileInfo, found bool, err error) {
-	parameters := url.Values{
-		"limit":   []string{"1"},
-		"deleted": []string{"false"},
-		"offset":  []string{strconv.Itoa(offset)},
-	}
-
+func (f *Fs) getRootFileID(ctx context.Context) (result *api.FileInfo, found bool, err error) {
 	opts := rest.Opts{
-		Method:     "GET",
-		Path:       "rest/folders/top",
-		Parameters: parameters,
+		Method: "GET",
+		Path:   "rest/users/me",
 	}
 
-	rootTopDir := &api.DirectoryInfo{}
+	userInfo := &api.UserInfo{}
 
 	err = f.pacer.Call(func() (bool, error) {
-		resp, err := f.srv.CallJSON(ctx, &opts, nil, rootTopDir)
+		resp, err := f.srv.CallJSON(ctx, &opts, nil, userInfo)
 		return shouldRetry(ctx, resp, err)
 	})
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to get file id: %w", err)
 	}
 
-	if len(rootTopDir.Data) == 0 {
-		return nil, false, nil
-	}
-
-	if *rootTopDir.Data[0].ParentID == "0" {
-		return f.getRootFileID(ctx, offset+1)
-	}
-
 	return &api.FileInfo{
-		ID:   *rootTopDir.Data[0].ParentID,
+		ID:   userInfo.BaseDirID,
 		Type: api.DirectoryType,
 	}, true, nil
 }

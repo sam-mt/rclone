@@ -113,6 +113,11 @@ type DirectoryInfo struct {
 	Data []FileInfo `json:"data"`
 }
 
+// UserInfo is a model for /rest/users/me - user for getting root dir id
+type UserInfo struct {
+	BaseDirID string `json:"basedirId"`
+}
+
 // IsFile checks whether file item is a file
 func (fi *FileInfo) IsFile() bool {
 	if fi == nil {
