@@ -61,7 +61,7 @@ Got code
 --------------------
 [remote]
 client_id = 8312a84e-556d-7gc8-7e9d-e19367916d10
-client_secret = abcR#ds!6cbxk
+client_secret = xxxxxxxxxx
 hostname = example.kiteworks.com
 access_scopes = files/* folders/* uploads/* search/* users/Read
 token = {"access_token":"XXX","token_type":"Bearer","refresh_token":"XXX","expiry":"XXX"}
@@ -129,7 +129,7 @@ remote> remote
 [remote]
 type = kiteworks
 client_id = 8312a84e-556d-7gc8-7e9d-e19367916d10
-client_secret = abcR#ds!6cbxk
+client_secret = xxxxxxxxxx
 hostname = example.kiteworks.com
 access_scopes = files/* folders/* uploads/* search/* users/Read
 token = {"access_token":"XXX","token_type":"Bearer","refresh_token":"XXX","expiry":"XXX"}
@@ -140,7 +140,7 @@ Edit? (y/n)>
 y) Yes
 n) No
 y/n> n
-Value "client_secret" = "abcR#ds!6cbxk"
+Value "client_secret" = "xxxxxxxxxx"
 Edit? (y/n)>
 y) Yes
 n) No
@@ -175,7 +175,7 @@ Got code
 [remote]
 type = kiteworks
 client_id = 8312a84e-556d-7gc8-7e9d-e19367916d10
-client_secret = abcR#ds!6cbxk
+client_secret = xxxxxxxx
 hostname = example.kiteworks.com
 access_scopes = files/* folders/* uploads/* search/* users/Read
 token = {"access_token":"XXX","token_type":"Bearer","refresh_token":"XXX","expiry":"XXX"}
