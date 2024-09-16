@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -42,9 +43,13 @@ const (
 	minSleep      = 10 * time.Millisecond
 	maxSleep      = 2 * time.Second
 	decayConstant = 2 // bigger for slower decay, exponential
+
+	shareNamePattern = `^(?P<name>.*)-(?P<id>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$`
 )
 
 var kiteworksHashType hash.Type
+
+var shareRE *regexp.Regexp
 
 func getOauthConfig(m configmap.Mapper) *oauth2.Config {
 	hostname, _ := m.Get("hostname")
@@ -66,6 +71,7 @@ func getOauthConfig(m configmap.Mapper) *oauth2.Config {
 
 func init() {
 	kiteworksHashType = hash.RegisterHash(api.HashName, strings.ToUpper(api.HashName), 64, sha3.New256)
+	shareRE = regexp.MustCompile(shareNamePattern)
 
 	fs.Register(&fs.RegInfo{
 		Name:        "kiteworks",
@@ -153,28 +159,29 @@ type Options struct {
 
 // Fs represents remote Kiteworks fs
 type Fs struct {
+	features     *fs.Features
+	ci           *fs.ConfigInfo
+	srv          *rest.Client
+	pacer        *fs.Pacer
+	tokenRenewer *oauthutil.Renew
+	dirCache     *dircache.DirCache
 	name         string
 	root         string
 	description  string
-	features     *fs.Features
+	rootID       string
 	opt          Options
-	ci           *fs.ConfigInfo
-	srv          *rest.Client     // the connection to the kiteworks server
-	pacer        *fs.Pacer        // pacer for API calls
-	tokenRenewer *oauthutil.Renew // renew the token on expiry
-	dirCache     *dircache.DirCache
 }
 
 // Object describes a quatrix object
 type Object struct {
+	modTime     time.Time
 	fs          *Fs
 	remote      string
-	size        int64
-	modTime     time.Time
 	id          string
-	hasMetaData bool
 	obType      string
 	sha256      string
+	size        int64
+	hasMetaData bool
 }
 
 // trimPath trims redundant slashes from kiteworks 'url'
@@ -201,6 +208,33 @@ func shouldRetry(ctx context.Context, resp *http.Response, err error) (bool, err
 	}
 
 	return fserrors.ShouldRetry(err) || fserrors.ShouldRetryHTTP(resp, retryErrorCodes), err
+}
+
+func reGroupMatches(re *regexp.Regexp, s string) map[string]string {
+	matches := re.FindStringSubmatch(s)
+	names := re.SubexpNames()
+	if matches == nil {
+		return nil
+	}
+
+	if len(matches) != len(names) {
+		return nil
+	}
+
+	matchMap := map[string]string{}
+	for i := 1; i < len(matches); i++ {
+		matchMap[names[i]] = matches[i]
+	}
+
+	return matchMap
+}
+
+func pathSplit(path string) []string {
+	path, leaf := filepath.Split(path)
+	if path == "" {
+		return []string{leaf}
+	}
+	return append(pathSplit(filepath.Clean(path)), leaf)
 }
 
 // NewFs constructs an Fs from the path, container:path
@@ -252,6 +286,8 @@ func NewFs(ctx context.Context, name, root string, m configmap.Mapper) (fs.Fs, e
 	if !found {
 		return nil, errors.New("root not found")
 	}
+
+	f.rootID = rootID.ID
 
 	f.dirCache = dircache.New(root, rootID.ID, f)
 
@@ -605,7 +641,7 @@ func (f *Fs) getMetadata(ctx context.Context, id string) (result *api.FileInfo, 
 			return nil, err
 		}
 
-		directory, err := f.getDirectoryMetadata(ctx, id)
+		directory, err := f.getDirectoryContent(ctx, id)
 		if err != nil {
 			return nil, err
 		}
@@ -624,6 +660,7 @@ func (f *Fs) getMetadata(ctx context.Context, id string) (result *api.FileInfo, 
 func (f *Fs) getFileMetadata(ctx context.Context, id string) (result *api.FileInfo, err error) {
 	parameters := url.Values{
 		"deleted": []string{"false"},
+		"with":    []string{"(parent:(path,currentUserRole,permissions))"},
 	}
 
 	opts := rest.Opts{
@@ -651,7 +688,38 @@ func (f *Fs) getFileMetadata(ctx context.Context, id string) (result *api.FileIn
 	return result, nil
 }
 
-func (f *Fs) getDirectoryMetadata(ctx context.Context, id string) (result *api.DirectoryInfo, err error) {
+func (f *Fs) getFolderMetadata(ctx context.Context, id string) (result *api.FileInfo, err error) {
+	parameters := url.Values{
+		"deleted": []string{"false"},
+		"with":    []string{"(parent:(path,currentUserRole,permissions))"},
+	}
+
+	opts := rest.Opts{
+		Method:     "GET",
+		Path:       fmt.Sprintf("rest/folders/%s", id),
+		Parameters: parameters,
+	}
+
+	result = &api.FileInfo{}
+
+	var resp *http.Response
+	err = f.pacer.Call(func() (bool, error) {
+		resp, err = f.srv.CallJSON(ctx, &opts, nil, result)
+		return shouldRetry(ctx, resp, err)
+	})
+	if err != nil {
+		// Kiteworks returns 403 in case non existent ID is specified
+		if resp != nil && resp.StatusCode == http.StatusForbidden {
+			return nil, fs.ErrorObjectNotFound
+		}
+
+		return nil, fmt.Errorf("failed to get file metadata: %w", err)
+	}
+
+	return result, nil
+}
+
+func (f *Fs) getDirectoryContent(ctx context.Context, id string) (result *api.DirectoryInfo, err error) {
 	parameters := url.Values{
 		"deleted": []string{"false"},
 	}
@@ -676,6 +744,16 @@ func (f *Fs) getDirectoryMetadata(ctx context.Context, id string) (result *api.D
 		}
 
 		return nil, fmt.Errorf("failed to get directory metadata: %w", err)
+	}
+
+	// When listing root directory - fetch shared folders that are displayed on root level in kiteworks
+	if id == f.rootID {
+		shares, err := f.getSharedFolders(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		result.Data = append(result.Data, shares.Data...)
 	}
 
 	return result, nil
@@ -770,7 +848,7 @@ func (f *Fs) List(ctx context.Context, dir string) (entries fs.DirEntries, err e
 		return nil, err
 	}
 
-	content, err := f.getDirectoryMetadata(ctx, directoryID)
+	content, err := f.getDirectoryContent(ctx, directoryID)
 	if err != nil {
 		return nil, err
 	}
@@ -813,7 +891,7 @@ func (f *Fs) FindLeaf(ctx context.Context, pathID, leaf string) (folderID string
 	}
 
 	if result.IsFile() {
-		return "", false, nil
+		return "", false, fs.ErrorIsFile
 	}
 
 	return result.ID, true, nil
@@ -835,50 +913,161 @@ func (f *Fs) CreateDir(ctx context.Context, pathID, leaf string) (dirID string, 
 	return dir.ID, nil
 }
 
+// getChildFolderID - get metadata of first level nested file from parentID by name
+func (f *Fs) getChildFileID(ctx context.Context, parentID, name string) (result *api.FileInfo, found bool, err error) {
+	return f.getChildObjectID(ctx, fmt.Sprintf("rest/folders/%s/files", parentID), name)
+}
+
+// getChildFolderID - get metadata of first level nested folder from parentID by name
+func (f *Fs) getChildFolderID(ctx context.Context, parentID, name string) (result *api.FileInfo, found bool, err error) {
+	return f.getChildObjectID(ctx, fmt.Sprintf("rest/folders/%s/folders", parentID), name)
+}
+
+// getChildObjectID - get metadata of first level child object in folder with parentID by name
+func (f *Fs) getChildObjectID(ctx context.Context, apiPath, name string) (result *api.FileInfo, found bool, err error) {
+	parameters := url.Values{
+		"deleted": []string{"false"},
+		"name":    []string{f.opt.Enc.FromStandardPath(name)},
+	}
+
+	opts := rest.Opts{
+		Method:     "GET",
+		Path:       apiPath,
+		Parameters: parameters,
+	}
+
+	children := &api.DirectoryInfo{}
+
+	var resp *http.Response
+	err = f.pacer.Call(func() (bool, error) {
+		resp, err = f.srv.CallJSON(ctx, &opts, nil, children)
+		return shouldRetry(ctx, resp, err)
+	})
+	if err != nil {
+		// Kiteworks returns 403 in case non existent ID is specified
+		if resp != nil && resp.StatusCode == http.StatusForbidden {
+			return nil, false, fs.ErrorObjectNotFound
+		}
+
+		return nil, false, fmt.Errorf("failed to get directory metadata: %w", err)
+	}
+
+	if len(children.Data) != 1 {
+		return nil, false, nil
+	}
+
+	return &children.Data[0], true, nil
+}
+
 // getFileID gets id, parent and type of path in given parentID
 func (f *Fs) getFileID(ctx context.Context, parentID, path string) (result *api.FileInfo, found bool, err error) {
 	if path == "" {
 		return f.getRootFileID(ctx)
 	}
 
+	pathParts := pathSplit(path)
+
+	// when parentID is set and path is only object name - lookup ID directly under the parent
+	if parentID != "" && len(pathParts) == 1 {
+		result, found, err = f.getChildFileID(ctx, parentID, path)
+		if err != nil {
+			return nil, false, err
+		}
+
+		if found {
+			return result, found, nil
+		}
+
+		result, found, err = f.getChildFolderID(ctx, parentID, path)
+		if err != nil {
+			return nil, false, err
+		}
+
+		if found {
+			return result, found, nil
+		}
+
+		if parentID == f.rootID {
+			result, err := f.getShareMetadata(ctx, path)
+			if err != nil {
+				return nil, false, nil
+			}
+
+			return result, true, nil
+		}
+	}
+
 	parentPath, _ := f.dirCache.GetInv(parentID)
-	path = filepath.Join(parentPath, path)
+	searchPath := filepath.Join(parentPath, path)
 
 	// search in Kiteworks works always from the home folder, so we need to join path with the root when needed
-	if !f.isRootIncluded(path) {
-		path = filepath.Join(f.Root(), path)
+	if !f.isRootIncluded(searchPath) {
+		searchPath = filepath.Join(f.Root(), searchPath)
 	}
 
-	parameters := url.Values{
-		"path": []string{f.opt.Enc.FromStandardPath(path)},
+	// search by path
+	result, err = f.queryID(ctx, parentID, searchPath)
+	if err != nil && err != fs.ErrorObjectNotFound {
+		return nil, false, err
 	}
 
-	opts := rest.Opts{
-		Method:     "GET",
-		Path:       "rest/search",
-		Parameters: parameters,
-	}
-
-	search := &api.FileSearch{}
-
-	err = f.pacer.Call(func() (bool, error) {
-		resp, err := f.srv.CallJSON(ctx, &opts, nil, search)
-		return shouldRetry(ctx, resp, err)
-	})
-	if err != nil {
-		return nil, false, fmt.Errorf("failed to get file id: %w", err)
-	}
-
-	result = search.FindByParent(parentID)
 	if result == nil || result.ParentID == nil {
+		//
+		if parentID == "" {
+			shareParts := reGroupMatches(shareRE, pathParts[0])
+
+			if shareParts == nil {
+				return nil, false, nil
+			}
+
+			result, err = f.queryID(ctx, shareParts["id"], filepath.Join(shareParts["name"], filepath.Join(pathParts[1:]...)))
+			if err != nil {
+				if err == fs.ErrorObjectNotFound {
+					return nil, false, nil
+				}
+				return nil, false, err
+			}
+
+			if result == nil || result.ParentID == nil {
+				result, err = f.searchID(ctx, shareParts["id"], filepath.Join(shareParts["name"], filepath.Join(pathParts[1:]...)))
+				if err != nil {
+					if err == fs.ErrorObjectNotFound {
+						return nil, false, nil
+					}
+					return nil, false, err
+				}
+			}
+
+			return result, true, nil
+		}
+
 		return nil, false, nil
 	}
 
 	if result.ID == "" {
-		return nil, false, fmt.Errorf("empty ID returned for path %s", path)
+		return nil, false, fmt.Errorf("empty ID returned for path %s", searchPath)
 	}
 
 	return result, true, nil
+}
+
+func (f *Fs) getShareMetadata(ctx context.Context, name string) (*api.FileInfo, error) {
+	nameParts := reGroupMatches(shareRE, name)
+
+	if nameParts == nil {
+		return nil, fmt.Errorf("did not match share pattern: %s", name)
+	}
+
+	if nameParts["id"] == "" {
+		return nil, fmt.Errorf("failed to get share ID: %s", name)
+	}
+
+	result, err := f.getFolderMetadata(ctx, nameParts["id"])
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
 func (f *Fs) isRootIncluded(path string) bool {
@@ -912,6 +1101,155 @@ func (f *Fs) getRootFileID(ctx context.Context) (result *api.FileInfo, found boo
 		ID:   userInfo.BaseDirID,
 		Type: api.DirectoryType,
 	}, true, nil
+}
+
+// queryID - search for files and folders by path - recommended API to use
+func (f *Fs) queryID(ctx context.Context, parentID, path string) (*api.FileInfo, error) {
+	parameters := url.Values{
+		"includeContent": []string{"false"},
+		"searchType":     []string{"f,d"},
+		"path":           []string{f.opt.Enc.FromStandardPath(path)},
+		"deleted":        []string{"false"},
+	}
+
+	if parentID != "" {
+		parameters["objectID"] = []string{parentID}
+	}
+
+	opts := rest.Opts{
+		Method:     "GET",
+		Path:       "rest/query",
+		Parameters: parameters,
+	}
+
+	search := &api.FileSearch{}
+
+	err := f.pacer.Call(func() (bool, error) {
+		resp, err := f.srv.CallJSON(ctx, &opts, nil, search)
+		return shouldRetry(ctx, resp, err)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("search - failed to get file id: %w", err)
+	}
+
+	result, err := f.findByParent(ctx, search, parentID)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// searchID - search for files and folders by path - deprecated API left for backward compatibility
+func (f *Fs) searchID(ctx context.Context, parentID, path string) (*api.FileInfo, error) {
+	parameters := url.Values{
+		"path": []string{f.opt.Enc.FromStandardPath(path)},
+	}
+
+	opts := rest.Opts{
+		Method:     "GET",
+		Path:       "rest/search",
+		Parameters: parameters,
+	}
+
+	search := &api.FileSearch{}
+
+	err := f.pacer.Call(func() (bool, error) {
+		resp, err := f.srv.CallJSON(ctx, &opts, nil, search)
+		return shouldRetry(ctx, resp, err)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("search - failed to get file id: %w", err)
+	}
+
+	result, err := f.findByParent(ctx, search, parentID)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func (f *Fs) getSharedFolders(ctx context.Context) (result *api.DirectoryInfo, err error) {
+	parameters := url.Values{
+		"deleted":    []string{"false"},
+		"sharedByMe": []string{"false"},
+	}
+
+	opts := rest.Opts{
+		Method:     "GET",
+		Path:       "rest/folders/shared",
+		Parameters: parameters,
+	}
+
+	result = &api.DirectoryInfo{}
+	var resp *http.Response
+	err = f.pacer.Call(func() (bool, error) {
+		resp, err = f.srv.CallJSON(ctx, &opts, nil, result)
+		return shouldRetry(ctx, resp, err)
+	})
+	if err != nil {
+		// Kiteworks returns 403 in case non existent ID is specified
+		if resp != nil && resp.StatusCode == http.StatusForbidden {
+			return nil, fs.ErrorObjectNotFound
+		}
+
+		return nil, fmt.Errorf("failed to get shared folders: %w", err)
+	}
+
+	for i, s := range result.Data {
+		result.Data[i].Name = fmt.Sprintf("%s-%s", s.Name, s.ID)
+		result.Data[i].ParentID = &f.rootID
+	}
+
+	return result, nil
+}
+
+func (f *Fs) findByParent(ctx context.Context, search *api.FileSearch, parentID string) (*api.FileInfo, error) {
+	if parentID == "" {
+		if len(search.Files) == 1 {
+			return &search.Files[0], nil
+		} else if len(search.Files) > 1 {
+			// loop over files
+			for i := range search.Files {
+				fi, err := f.getFileMetadata(ctx, search.Files[i].ID)
+				if err != nil {
+					return nil, err
+				}
+				if fi.Parent.CurrentUserRole.Name == "Owner" {
+					return fi, nil
+				}
+			}
+		}
+
+		if len(search.Folders) == 1 {
+			return &search.Folders[0], nil
+		} else if len(search.Folders) > 1 {
+			for i := range search.Folders {
+				fi, err := f.getFolderMetadata(ctx, search.Folders[i].ID)
+				if err != nil {
+					return nil, err
+				}
+				if fi.Parent.CurrentUserRole.Name == "Owner" {
+					return fi, nil
+				}
+			}
+		}
+	}
+
+	for _, f := range search.Files {
+		if f.ParentID != nil && *f.ParentID == parentID || strings.HasPrefix(*f.PathIDs, parentID) {
+			return &f, nil
+		}
+	}
+
+	for _, f := range search.Folders {
+		if f.ParentID != nil && *f.ParentID == parentID || strings.HasPrefix(*f.PathIDs, parentID) {
+			return &f, nil
+		}
+	}
+
+	return nil, fs.ErrorObjectNotFound
 }
 
 // createDir creates directory in pathID with name leaf

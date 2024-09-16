@@ -20,44 +20,35 @@ type FileSearch struct {
 	Folders []FileInfo `json:"folders"`
 }
 
-// FindByParent returns file item by parent ID
-func (fs *FileSearch) FindByParent(parentID string) *FileInfo {
-	if parentID == "" {
-		if len(fs.Files) > 0 {
-			return &fs.Files[0]
-		}
-
-		if len(fs.Folders) > 0 {
-			return &fs.Folders[0]
-		}
-	}
-
-	for _, f := range fs.Files {
-		if f.ParentID != nil && *f.ParentID == parentID {
-			return &f
-		}
-	}
-
-	for _, f := range fs.Folders {
-		if f.ParentID != nil && *f.ParentID == parentID {
-			return &f
-		}
-	}
-
-	return nil
-}
-
 // FileInfo is a file info model
 type FileInfo struct {
-	ID             string           `json:"id"`
+	Modified       Time             `json:"modified"`
 	ParentID       *string          `json:"parentId"`
+	ClientModified *Time            `json:"clientModified"`
+	PathIDs        *string          `json:"pathIds"`
+	Parent         *Parent          `json:"parent"`
+	ID             string           `json:"id"`
 	Type           string           `json:"type"`
 	Name           string           `json:"name"`
 	Path           string           `json:"path"`
-	Size           int64            `json:"size"`
-	Modified       Time             `json:"modified"`
-	ClientModified *Time            `json:"clientModified"`
 	FingerPrints   FileFingerPrints `json:"fingerprints"`
+	Size           int64            `json:"size"`
+}
+
+// Parent field of FileInfo object
+type Parent struct {
+	Modified        Time    `json:"modified"`
+	ParentID        *string `json:"parentId"`
+	Name            string  `json:"name"`
+	Type            string  `json:"type"`
+	Path            string  `json:"path"`
+	ID              string  `json:"id"`
+	CurrentUserRole struct {
+		Name string `json:"name"`
+		Type string `json:"type"`
+		ID   int    `json:"id"`
+		Rank int    `json:"rank"`
+	} `json:"currentUserRole"`
 }
 
 // FileFingerPrints is a custom type for a list of FileFingerPrint
@@ -156,15 +147,15 @@ type DownloadLinkResponse struct {
 // InitializeUpload is a request model to initialize upload
 type InitializeUpload struct {
 	FileName       string `json:"filename"`
+	ClientModified string `json:"clientModified,omitempty"`
 	TotalChunks    int    `json:"totalChunks,omitempty"`
 	TotalSize      int64  `json:"totalSize"`
-	ClientModified string `json:"clientModified,omitempty"`
 }
 
 // UploadResult is a response model for initialized upload
 type UploadResult struct {
-	ID        int64  `json:"id"`
 	URI       string `json:"uri"`
+	ID        int64  `json:"id"`
 	TotalSize int64  `json:"totalSize"`
 }
 
