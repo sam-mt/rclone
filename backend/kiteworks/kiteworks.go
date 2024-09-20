@@ -251,7 +251,7 @@ func NewFs(ctx context.Context, name, root string, m configmap.Mapper) (fs.Fs, e
 
 	client, ts, err := oauthutil.NewClient(ctx, name, m, getOauthConfig(m))
 	if err != nil {
-		return nil, fmt.Errorf("failed to configure Kiteworks: %w", err)
+		return nil, fmt.Errorf("configure oauth client for Kiteworks: %w", err)
 	}
 
 	f := &Fs{
@@ -438,7 +438,7 @@ func (o *Object) Open(ctx context.Context, options ...fs.OpenOption) (in io.Read
 func (o *Object) ModTime(ctx context.Context) time.Time {
 	err := o.readMetaData(ctx, false)
 	if err != nil {
-		fs.Logf(o, "Failed to read metadata: %v", err)
+		fs.Logf(o, "read metadata: %v", err)
 		return time.Now()
 	}
 
@@ -454,7 +454,7 @@ func (o *Object) SetModTime(ctx context.Context, t time.Time) error {
 func (o *Object) Size() int64 {
 	err := o.readMetaData(context.TODO(), false)
 	if err != nil {
-		fs.Logf(o, "Failed to read metadata: %v", err)
+		fs.Logf(o, "read metadata: %v", err)
 		return 0
 	}
 
@@ -477,7 +477,8 @@ func (o *Object) Hash(ctx context.Context, ty hash.Type) (string, error) {
 		return "", hash.ErrUnsupported
 	}
 
-	// ! TODO upload should return hash in the response model because otherwise on each upload we will be reading metadata to know changed hash
+	// ! TODO upload should return hash in the response model because
+	// otherwise on each upload we will be reading metadata to know changed hash
 	err := o.readMetaData(ctx, true)
 	if err != nil {
 		return "", err
@@ -508,7 +509,7 @@ func (o *Object) Remote() string {
 func (o *Object) Remove(ctx context.Context) error {
 	err := o.fs.deleteObject(ctx, o.id)
 	if err != nil {
-		return fmt.Errorf("failed to remove %s %s: %w", o.obType, o.id, err)
+		return fmt.Errorf("remove %s %s: %w", o.obType, o.id, err)
 	}
 
 	if o.obType != api.FileType {
@@ -567,7 +568,7 @@ func (f *Fs) upload(ctx context.Context, file io.Reader, parentID, name string, 
 		return shouldRetry(ctx, resp, err)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize upload: %w", err)
+		return nil, fmt.Errorf("initialize upload: %w", err)
 	}
 
 	return f.uploadChunks(ctx, file, name, result.URI, chunks)
@@ -607,7 +608,7 @@ func (f *Fs) uploadChunks(ctx context.Context, file io.Reader, name, path string
 			return shouldRetry(ctx, resp, err)
 		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to upload chunk %d of file: %w", index, err)
+			return nil, fmt.Errorf("upload chunk %d of file: %w", index, err)
 		}
 	}
 
@@ -682,7 +683,7 @@ func (f *Fs) getFileMetadata(ctx context.Context, id string) (result *api.FileIn
 			return nil, fs.ErrorObjectNotFound
 		}
 
-		return nil, fmt.Errorf("failed to get file metadata: %w", err)
+		return nil, fmt.Errorf("get file metadata: %w", err)
 	}
 
 	return result, nil
@@ -713,7 +714,7 @@ func (f *Fs) getFolderMetadata(ctx context.Context, id string) (result *api.File
 			return nil, fs.ErrorObjectNotFound
 		}
 
-		return nil, fmt.Errorf("failed to get file metadata: %w", err)
+		return nil, fmt.Errorf("get folder metadata: %w", err)
 	}
 
 	return result, nil
@@ -743,7 +744,7 @@ func (f *Fs) getDirectoryContent(ctx context.Context, id string) (result *api.Di
 			return nil, fs.ErrorObjectNotFound
 		}
 
-		return nil, fmt.Errorf("failed to get directory metadata: %w", err)
+		return nil, fmt.Errorf("get directory content: %w", err)
 	}
 
 	// When listing root directory - fetch shared folders that are displayed on root level in kiteworks
@@ -869,7 +870,7 @@ func (f *Fs) List(ctx context.Context, dir string) (entries fs.DirEntries, err e
 
 			err = o.setMetaData(&file)
 			if err != nil {
-				fs.Debugf(file, "failed to set object metadata: %s", err)
+				fs.Debugf(file, "set object metadata: %s", err)
 			}
 
 			entries = append(entries, o)
@@ -949,7 +950,7 @@ func (f *Fs) getChildObjectID(ctx context.Context, apiPath, name string) (result
 			return nil, false, fs.ErrorObjectNotFound
 		}
 
-		return nil, false, fmt.Errorf("failed to get directory metadata: %w", err)
+		return nil, false, fmt.Errorf("get child object metadata: %w", err)
 	}
 
 	if len(children.Data) != 1 {
@@ -1059,7 +1060,7 @@ func (f *Fs) getShareMetadata(ctx context.Context, name string) (*api.FileInfo, 
 	}
 
 	if nameParts["id"] == "" {
-		return nil, fmt.Errorf("failed to get share ID: %s", name)
+		return nil, fmt.Errorf("parse share ID: %s", name)
 	}
 
 	result, err := f.getFolderMetadata(ctx, nameParts["id"])
@@ -1094,7 +1095,7 @@ func (f *Fs) getRootFileID(ctx context.Context) (result *api.FileInfo, found boo
 		return shouldRetry(ctx, resp, err)
 	})
 	if err != nil {
-		return nil, false, fmt.Errorf("failed to get file id: %w", err)
+		return nil, false, fmt.Errorf("profile - get file id: %w", err)
 	}
 
 	return &api.FileInfo{
@@ -1129,7 +1130,7 @@ func (f *Fs) queryID(ctx context.Context, parentID, path string) (*api.FileInfo,
 		return shouldRetry(ctx, resp, err)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("search - failed to get file id: %w", err)
+		return nil, fmt.Errorf("query - get file id: %w", err)
 	}
 
 	result, err := f.findByParent(ctx, search, parentID)
@@ -1159,7 +1160,7 @@ func (f *Fs) searchID(ctx context.Context, parentID, path string) (*api.FileInfo
 		return shouldRetry(ctx, resp, err)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("search - failed to get file id: %w", err)
+		return nil, fmt.Errorf("search - get file id: %w", err)
 	}
 
 	result, err := f.findByParent(ctx, search, parentID)
@@ -1194,7 +1195,7 @@ func (f *Fs) getSharedFolders(ctx context.Context) (result *api.DirectoryInfo, e
 			return nil, fs.ErrorObjectNotFound
 		}
 
-		return nil, fmt.Errorf("failed to get shared folders: %w", err)
+		return nil, fmt.Errorf("get shared folders: %w", err)
 	}
 
 	for i, s := range result.Data {
@@ -1216,7 +1217,7 @@ func (f *Fs) findByParent(ctx context.Context, search *api.FileSearch, parentID 
 				if err != nil {
 					return nil, err
 				}
-				if fi.Parent.CurrentUserRole.Name == "Owner" {
+				if strings.EqualFold(fi.Parent.CurrentUserRole.Name, "Owner") {
 					return fi, nil
 				}
 			}
@@ -1230,7 +1231,7 @@ func (f *Fs) findByParent(ctx context.Context, search *api.FileSearch, parentID 
 				if err != nil {
 					return nil, err
 				}
-				if fi.Parent.CurrentUserRole.Name == "Owner" {
+				if strings.EqualFold(fi.Parent.CurrentUserRole.Name, "Owner") {
 					return fi, nil
 				}
 			}
@@ -1277,7 +1278,7 @@ func (f *Fs) createDir(ctx context.Context, pathID, leaf string) (newDir *api.Fi
 		return shouldRetry(ctx, resp, err)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create directory: %w", err)
+		return nil, fmt.Errorf("create directory: %w", err)
 	}
 
 	return
@@ -1420,7 +1421,7 @@ func (f *Fs) About(ctx context.Context) (usage *fs.Usage, err error) {
 		return shouldRetry(ctx, resp, err)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to read quota info: %w", err)
+		return nil, fmt.Errorf("read quota info: %w", err)
 	}
 
 	free := quota.FolderQuotaAllowed - quota.FolderQuotaUsed
