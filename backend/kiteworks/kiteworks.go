@@ -1107,14 +1107,14 @@ func (f *Fs) getRootFileID(ctx context.Context) (result *api.FileInfo, found boo
 // queryID - search for files and folders by path - recommended API to use
 func (f *Fs) queryID(ctx context.Context, parentID, path string) (*api.FileInfo, error) {
 	parameters := url.Values{
-		"includeContent": []string{"false"},
+		"includeContent": []string{"true"},
 		"searchType":     []string{"f,d"},
 		"path":           []string{f.opt.Enc.FromStandardPath(path)},
 		"deleted":        []string{"false"},
 	}
 
 	if parentID != "" {
-		parameters["objectID"] = []string{parentID}
+		parameters["objectId"] = []string{parentID}
 	}
 
 	opts := rest.Opts{
