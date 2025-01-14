@@ -86,6 +86,16 @@ build.
 Once it compiles locally, push it on a test branch and commit fixes
 until the tests pass.
 
+### Major versions
+
+The above procedure will not upgrade major versions, so v2 to v3.
+However this tool can show which major versions might need to be
+upgraded:
+
+    go run github.com/icholy/gomajor@latest list -major
+
+Expect API breakage when updating major versions.
+
 ## Tidy beta
 
 At some point after the release run
@@ -168,6 +178,8 @@ docker buildx build -t rclone/rclone:testing --progress=plain --platform linux/a
 
 To make a full build then set the tags correctly and add `--push`
 
+Note that you can't only build one architecture - you need to build them all.
+
 ```
-docker buildx build --platform linux/amd64,linux/386,linux/arm64,linux/arm/v7 -t rclone/rclone:1.54.1 -t rclone/rclone:1.54 -t rclone/rclone:1 -t rclone/rclone:latest --push .
+docker buildx build --platform linux/amd64,linux/386,linux/arm64,linux/arm/v7,linux/arm/v6 -t rclone/rclone:1.54.1 -t rclone/rclone:1.54 -t rclone/rclone:1 -t rclone/rclone:latest --push .
 ```

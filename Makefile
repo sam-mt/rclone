@@ -144,10 +144,14 @@ MANUAL.txt:	MANUAL.md
 	pandoc -s --from markdown-smart --to plain MANUAL.md -o MANUAL.txt
 
 commanddocs: rclone
-	XDG_CACHE_HOME="" XDG_CONFIG_HOME="" HOME="\$$HOME" USER="\$$USER" rclone gendocs docs/content/
+	-@rmdir -p '$$HOME/.config/rclone'
+	XDG_CACHE_HOME="" XDG_CONFIG_HOME="" HOME="\$$HOME" USER="\$$USER" rclone gendocs --config=/notfound docs/content/
+	@[ ! -e '$$HOME' ] || (echo 'Error: created unwanted directory named $$HOME' && exit 1)
 
 backenddocs: rclone bin/make_backend_docs.py
+	-@rmdir -p '$$HOME/.config/rclone'
 	XDG_CACHE_HOME="" XDG_CONFIG_HOME="" HOME="\$$HOME" USER="\$$USER" ./bin/make_backend_docs.py
+	@[ ! -e '$$HOME' ] || (echo 'Error: created unwanted directory named $$HOME' && exit 1)
 
 rcdocs: rclone
 	bin/make_rc_docs.sh
@@ -239,7 +243,7 @@ fetch_binaries:
 	rclone -P sync --exclude "/testbuilds/**" --delete-excluded $(BETA_UPLOAD) build/
 
 serve:	website
-	cd docs && hugo server -v -w --disableFastRender
+	cd docs && hugo server --logLevel info -w --disableFastRender
 
 tag:	retag doc
 	bin/make_changelog.py $(LAST_TAG) $(VERSION) > docs/content/changelog.md.new

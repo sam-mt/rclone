@@ -95,7 +95,7 @@ func TestInternalParseExtensions(t *testing.T) {
 		wantErr error
 	}{
 		{"doc", []string{".doc"}, nil},
-		{" docx ,XLSX, 	pptx,svg", []string{".docx", ".xlsx", ".pptx", ".svg"}, nil},
+		{" docx ,XLSX, 	pptx,svg,md", []string{".docx", ".xlsx", ".pptx", ".svg", ".md"}, nil},
 		{"docx,svg,Docx", []string{".docx", ".svg"}, nil},
 		{"docx,potato,docx", []string{".docx"}, errors.New(`couldn't find MIME type for extension ".potato"`)},
 	} {
@@ -566,7 +566,7 @@ func (f *Fs) InternalTestAgeQuery(t *testing.T) {
 	// Check set up for filtering
 	assert.True(t, f.Features().FilterAware)
 
-	opt := &filter.Opt{}
+	opt := &filter.Options{}
 	err := opt.MaxAge.Set("1h")
 	assert.NoError(t, err)
 	flt, err := filter.NewFilter(opt)

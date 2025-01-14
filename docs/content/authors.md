@@ -865,3 +865,63 @@ put them back in again.` >}}
   * Michał Dzienisiewicz <michal.piotr.dz@gmail.com>
   * Florian Klink <flokli@flokli.de>
   * Bill Fraser <bill@wfraser.dev>
+  * Thearas <thearas850@gmail.com>
+  * Filipe Herculano <fifo_@live.com>
+  * Russ Bubley <russ.bubley@googlemail.com>
+  * Paul Collins <paul.collins@canonical.com>
+  * Tomasz Melcer <liori@exroot.org>
+  * itsHenry <2671230065@qq.com>
+  * Ke Wang <me@ke.wang>
+  * AThePeanut4 <49614525+AThePeanut4@users.noreply.github.com>
+  * Tobias Markus <tobbi.bugs@googlemail.com>
+  * Ernie Hershey <github@ernie.org>
+  * Will Miles <wmiles@sgl.com>
+  * David Seifert <16636962+SoapGentoo@users.noreply.github.com>
+  * Fornax <wimbrand96@gmail.com>
+  * Sam Harrison <sam.harrison@files.com>
+  * Péter Bozsó <3806723+peterbozso@users.noreply.github.com>
+  * Georg Welzel <gwelzel@mailbox.org>
+  * John Oxley <john.oxley@gmail.com> <joxley@meta.com>
+  * Pawel Palucha <pawel.palucha@aetion.com>
+  * crystalstall <crystalruby@qq.com>
+  * nipil <nipil@users.noreply.github.com>
+  * yuval-cloudinary <46710068+yuval-cloudinary@users.noreply.github.com>
+  * Mathieu Moreau <mrx23dot@users.noreply.github.com>
+  * fsantagostinobietti <6057026+fsantagostinobietti@users.noreply.github.com>
+  * Oleg Kunitsyn <114359669+hiddenmarten@users.noreply.github.com>
+  * Divyam <47589864+divyam234@users.noreply.github.com>
+  * ttionya <ttionya@users.noreply.github.com>
+  * quiescens <quiescens@gmail.com>
+  * rishi.sridhar <rishi.sridhar@zohocorp.com>
+  * Lawrence Murray <lawrence@indii.org>
+  * Leandro Piccilli <leandro.piccilli@thalesgroup.com>
+  * Benjamin Legrand <benjamin.legrand@seagate.com>
+  * Noam Ross <noam.ross@gmail.com>
+  * lostb1t <coding-mosses0z@icloud.com>
+  * Matthias Gatto <matthias.gatto@outscale.com>
+  * André Tran <andre.tran@outscale.com>
+  * Simon Bos <simon@simonbos.be>
+  * Alexandre Hamez <199517+ahamez@users.noreply.github.com>
+  * Randy Bush <randy@psg.com>
+  * Diego Monti <diegmonti@users.noreply.github.com>
+  * tgfisher <tgfisher@stanford.edu>
+  * Moises Lima <mozlima@gmail.com>
+  * Dimitar Ivanov <mimiteto@gmail.com>
+  * shenpengfeng <xinhangzhou@icloud.com>
+  * Dimitrios Slamaris <dim0x69@users.noreply.github.com>
+  * vintagefuture <39503528+vintagefuture@users.noreply.github.com>
+  * David Seifert <soap@gentoo.org>
+  * Michael R. Davis <mrdvt92@users.noreply.github.com>
+  * remygrandin <remy.gr@ndin.fr>
+  * Ilias Ozgur Can Leonard <iscilyas@gmail.com>
+  * divinity76 <divinity76@gmail.com>
+  * Martin Hassack <martin@redmaple.tech>
+  * Filipe Azevedo <pasnox@gmail.com>
+  * hayden.pan <hayden.pan@outlook.com>
+  * Yxxx <45665172+marsjane@users.noreply.github.com>
+  * Thomas ten Cate <ttencate@gmail.com>
+  * Louis Laureys <louis@laureys.me>
+  * Henry Lee <contact@nynxz.com>
+  * ToM <thomas.faucher@bibliosansfrontieres.org>
+  * TAKEI Yuya <853320+takei-yuya@users.noreply.github.com>
+  * Francesco Frassinelli <fraph24@gmail.com> <francesco.frassinelli@nina.no>

@@ -35,13 +35,16 @@ docs = [
     "box.md",
     "cache.md",
     "chunker.md",
+    "cloudinary.md",
     "sharefile.md",
     "crypt.md",
     "compress.md",
     "combine.md",
     "dropbox.md",
     "filefabric.md",
+    "filescom.md",
     "ftp.md",
+    "gofile.md",
     "googlecloudstorage.md",
     "drive.md",
     "googlephotos.md",
@@ -50,6 +53,7 @@ docs = [
     "hidrive.md",
     "http.md",
     "imagekit.md",
+    "iclouddrive.md",
     "internetarchive.md",
     "jottacloud.md",
     "kiteworks.md",
@@ -63,13 +67,14 @@ docs = [
     "azurefiles.md",
     "onedrive.md",
     "opendrive.md",
-    "oracleobjectstorage.md",
+    "oracleobjectstorage/_index.md",
     "qingstor.md",
     "quatrix.md",
     "sia.md",
     "swift.md",
     "pcloud.md",
     "pikpak.md",
+    "pixeldrain.md",
     "premiumizeme.md",
     "protondrive.md",
     "putio.md",
@@ -79,7 +84,6 @@ docs = [
     "smb.md",
     "storj.md",
     "sugarsync.md",
-    "tardigrade.md",            # stub only to redirect to storj.md
     "ulozto.md",
     "uptobox.md",
     "union.md",
@@ -157,6 +161,7 @@ def read_doc(doc):
 def check_docs(docpath):
     """Check all the docs are in docpath"""
     files = set(f for f in os.listdir(docpath) if f.endswith(".md"))
+    files.update(f for f in docs if os.path.exists(os.path.join(docpath,f)))
     files -= set(ignore_docs)
     docs_set = set(docs)
     if files == docs_set:

@@ -51,18 +51,16 @@ var kiteworksHashType hash.Type
 
 var shareRE *regexp.Regexp
 
-func getOauthConfig(m configmap.Mapper) *oauth2.Config {
+func getOauthConfig(m configmap.Mapper) *oauthutil.Config {
 	hostname, _ := m.Get("hostname")
 	clientID, _ := m.Get("client_id")
 	clientSecret, _ := m.Get("client_secret")
 	scopes, _ := m.Get("access_scopes")
 
-	return &oauth2.Config{
-		Scopes: []string{scopes},
-		Endpoint: oauth2.Endpoint{
-			AuthURL:  fmt.Sprintf(authorizaURLFmt, hostname),
-			TokenURL: fmt.Sprintf(tokenURLFmt, hostname),
-		},
+	return &oauthutil.Config{
+		Scopes:       []string{scopes},
+		AuthURL:      fmt.Sprintf(authorizaURLFmt, hostname),
+		TokenURL:     fmt.Sprintf(tokenURLFmt, hostname),
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		RedirectURL:  oauthutil.RedirectLocalhostURL,
